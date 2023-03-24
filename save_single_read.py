@@ -9,6 +9,7 @@ import csv
 import socket
 import struct
 
+
 class ADC_read_and_save:
     """
 
@@ -30,8 +31,10 @@ class ADC_read_and_save:
         self.chan = 0
         self.num_samples = 1024
         self.frequency = 10000
-        self.databuf = (c_float * self.num_samples)()
-        self.data = None
+        self.databuf = np.zeros(1024, dtype=float)
+        self.databuf_flag = 0
+        self.data_save = np.zeros(1024, dtype=float)
+        self.data = c_float(1)
 
     def main(self):
         self.udp()
@@ -40,9 +43,8 @@ class ADC_read_and_save:
         while True:
             # 循环 读取、保存、发送数据
             self.read_data()
-            self.save_data()
             self.udp_client_send()
-            time.sleep(1)
+            # time.sleep(1)
         client.close()
 
     def udp(self):
@@ -60,10 +62,11 @@ class ADC_read_and_save:
         :return:
         """
         # 将数值数组打包为二进制数据
+        # packed_data = struct.pack('!{}f'.format(len(self.data)), *self.data)
 
-        packed_data = struct.pack('!{}f'.format(len(self.data.value)), *self.data.value)
-
-        self.client.sendto(packed_data, self.ip_port)
+        # 将单个数值打包为二进制数据
+        data = struct.pack('!f', self.data.value)
+        self.client.sendto(self.data, self.ip_port)
 
     def open_device(self):
         """
@@ -91,14 +94,20 @@ class ADC_read_and_save:
         :return:
         """
         # 读取数据:信道、采样数、采样频率、数据缓冲列表
-        result = self.DAQdll.ADContinuV20(self.chan, self.num_samples, self.frequency, self.databuf)
-
+        result = self.DAQdll.ADSingleV20(self.chan, byref(self.data))
         # Check if the function call was successful
         if result != 0:
             print('Error: ADContinuV20 returned', result)
         else:
             # Convert the data buffer to a NumPy array for easier processing
-            self.data = np.array(self.databuf)
+            value = round(self.data.value, 4)
+            print(value)
+
+        self.databuf[self.databuf_flag] = value
+        self.databuf_flag = self.databuf_flag + 1
+        if self.databuf_flag == 1024:
+            self.databuf_flag = 0
+            self.save_data()
 
     def save_data(self):
         """
@@ -108,8 +117,8 @@ class ADC_read_and_save:
         with open('data.csv', mode='a', newline='') as file:
             writer = csv.writer(file)
             # Convert the data buffer to a NumPy array for easier processing
-            self.data = np.array(self.databuf)
-            writer.writerow(self.data)
+            self.data_save = np.array(self.databuf)
+            writer.writerow(self.data_save)
 
         file.close()
 
