@@ -33,9 +33,8 @@ class ADC_read_and_save:
         self.frequency = 10000
         self.databuf = np.zeros(1024, dtype=float)
         self.databuf_flag = 0
-        self.data_save = np.zeros(1024, dtype=float)
-        self.data = c_float(1)
-
+        self.data_true = c_float(1)
+        self.data = None
     def main(self):
         self.udp()
         self.open_device()
@@ -63,9 +62,9 @@ class ADC_read_and_save:
         """
         # 将数值数组打包为二进制数据
         # packed_data = struct.pack('!{}f'.format(len(self.data)), *self.data)
-
         # 将单个数值打包为二进制数据
-        data = struct.pack('!f', self.data.value)
+        # self.data = struct.pack('!f', self.data_true.value)
+
         self.client.sendto(self.data, self.ip_port)
 
     def open_device(self):
@@ -94,20 +93,25 @@ class ADC_read_and_save:
         :return:
         """
         # 读取数据:信道、采样数、采样频率、数据缓冲列表
-        result = self.DAQdll.ADSingleV20(self.chan, byref(self.data))
+        result = self.DAQdll.ADSingleV20(self.chan, byref(self.data_true))
         # Check if the function call was successful
         if result != 0:
             print('Error: ADContinuV20 returned', result)
         else:
-            # Convert the data buffer to a NumPy array for easier processing
-            value = round(self.data.value, 4)
-            print(value)
-
-        self.databuf[self.databuf_flag] = value
-        self.databuf_flag = self.databuf_flag + 1
-        if self.databuf_flag == 1024:
-            self.databuf_flag = 0
-            self.save_data()
+            # 保留4位小数，四舍五入
+            # self.data =self.data_true.value
+            # 取出指针真实值
+            self.data = self.data_true.value
+            print(self.data)
+            # 数据保存到缓存数组databuf，当databuf_flag执行函数self.save_data()，存入文件data.csv
+            self.databuf[self.databuf_flag] = self.data
+            self.databuf_flag = self.databuf_flag + 1
+            # 将单个数值打包为二进制数据，方便udp发送
+            self.data = struct.pack('!f', self.data_true.value)
+            # 判断是否存入文件data.csv
+            if self.databuf_flag == 1024:
+                self.databuf_flag = 0
+                self.save_data()
 
     def save_data(self):
         """

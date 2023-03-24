@@ -61,7 +61,7 @@ class ADC_read_and_save:
         """
         # 将数值数组打包为二进制数据
 
-        packed_data = struct.pack('!{}f'.format(len(self.data.value)), *self.data.value)
+        packed_data = struct.pack('!{}f'.format(len(self.data.value)), self.data.value)
 
         self.client.sendto(packed_data, self.ip_port)
 
