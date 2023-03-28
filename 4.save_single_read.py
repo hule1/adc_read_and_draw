@@ -11,6 +11,8 @@ import struct
 
 
 class ADC_read_and_save:
+
+
     """
 
     """
@@ -61,9 +63,9 @@ class ADC_read_and_save:
         :return:
         """
         # 将数值数组打包为二进制数据
-        # packed_data = struct.pack('!{}f'.format(len(self.data)), *self.data)
+        packed_data = struct.pack('!{}f'.format(len(self.data)), *self.data)
         # 将单个数值打包为二进制数据
-        # self.data = struct.pack('!f', self.data_true.value)
+        self.data = struct.pack('!f', self.data_true.value)
 
         self.client.sendto(self.data, self.ip_port)
 

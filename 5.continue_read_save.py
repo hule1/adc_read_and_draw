@@ -31,18 +31,20 @@ class ADC_read_and_save:
         self.chan = 0
         self.num_samples = 1024
         self.frequency = 10000
-        self.databuf = (c_float * self.num_samples)()
+        self.databuf = np.zeros(1024, dtype=float)
+        self.databuf_flag = 0
+        self.data_true = c_float(1)
         self.data = None
+        self.data_save = None
 
     def main(self):
-        # self.udp()
+        self.udp()
         self.open_device()
-        # self.output_data()
+        self.output_data()
         while True:
             # 循环 读取、保存、发送数据
-            self.collect_thread()
-            self.save_thread()
-            # self.udp_client_send()
+            self.read_data()
+            self.udp_client_send()
             # time.sleep(1)
         client.close()
 
@@ -61,9 +63,11 @@ class ADC_read_and_save:
         :return:
         """
         # 将数值数组打包为二进制数据
-        packed_data = struct.pack('<{}f'.format(len(self.data)), self.databuf)
+        # packed_data = struct.pack('!{}f'.format(len(self.data)), *self.data)
+        # 将单个数值打包为二进制数据
+        # self.data = struct.pack('!f', self.data_true.value)
 
-        self.client.sendto(packed_data, self.ip_port)
+        self.client.sendto(self.data, self.ip_port)
 
     def open_device(self):
         """
@@ -85,31 +89,42 @@ class ADC_read_and_save:
         # set ad1 out 1
         self.DAQdll.DASingleOutV20(1, self.value)
 
-    def collect_thread(self):
+    def read_data(self):
         """
             读取数据
         :return:
         """
         # 读取数据:信道、采样数、采样频率、数据缓冲列表
-        result = self.DAQdll.ADContinuV20(self.chan, self.num_samples, self.frequency, self.databuf)
-
+        result = self.DAQdll.ADSingleV20(self.chan, byref(self.data_true))
         # Check if the function call was successful
         if result != 0:
             print('Error: ADContinuV20 returned', result)
+        else:
+            # 保留4位小数，四舍五入
+            # self.data =self.data_true.value
+            # 取出指针真实值
+            self.data = self.data_true.value
+            print(self.data)
+            # 数据保存到缓存数组databuf，当databuf_flag执行函数self.save_data()，存入文件data.csv
+            self.databuf[self.databuf_flag] = self.data
+            self.databuf_flag = self.databuf_flag + 1
+            # 将单个数值打包为二进制数据，方便udp发送
+            self.data = struct.pack('!f', self.data_true.value)
+            # 判断是否存入文件data.csv
+            if self.databuf_flag == 1024:
+                self.databuf_flag = 0
+                self.save_data()
 
-    def save_thread(self):
+    def save_data(self):
         """
             追加csv文件的数据
         :return:
         """
-        # Convert the data buffer to a NumPy array for easier processing
-        self.data = np.array(self.databuf)
-        # 保存数据
         with open('data.csv', mode='a', newline='') as file:
             writer = csv.writer(file)
             # Convert the data buffer to a NumPy array for easier processing
-            # self.data = np.array(self.databuf)
-            writer.writerow(self.data)
+            self.data_save = np.array(self.databuf)
+            writer.writerow(self.data_save)
 
         file.close()
 

@@ -8,12 +8,14 @@ import numpy as np
 import csv
 import socket
 import struct
+import threading
 
 
 class ADC_read_and_save:
     """
 
     """
+
 
     def __init__(self):
         # 调用动态链接库
@@ -33,18 +35,27 @@ class ADC_read_and_save:
         self.frequency = 10000
         self.databuf = (c_float * self.num_samples)()
         self.data = None
+        self.data_fifo_flag = False
+        self.data_fifo = None
 
     def main(self):
-        # self.udp()
+        # # self.udp()
+        # self.open_device()
+        # # self.output_data()
+        # while True:
+        #     # 循环 读取、保存、发送数据
+        #     self.collect_thread()
+        #     self.save_thread()
+        #     # self.udp_client_send()
+        #     # time.sleep(1)
         self.open_device()
-        # self.output_data()
-        while True:
-            # 循环 读取、保存、发送数据
-            self.collect_thread()
-            self.save_thread()
-            # self.udp_client_send()
-            # time.sleep(1)
-        client.close()
+        # 创建线程进行数据采集和数据保存
+        collect_t = threading.Thread(target=self.collect_thread)
+        collect_t.start()
+        save_t = threading.Thread(target=self.save_thread)
+        save_t.start()
+        # 等待数据保存线程结束
+        save_t.join()
 
     def udp(self):
         """
@@ -90,12 +101,18 @@ class ADC_read_and_save:
             读取数据
         :return:
         """
-        # 读取数据:信道、采样数、采样频率、数据缓冲列表
-        result = self.DAQdll.ADContinuV20(self.chan, self.num_samples, self.frequency, self.databuf)
+        while True:
+            # 读取数据:信道、采样数、采样频率、数据缓冲列表
+            result = self.DAQdll.ADContinuV20(self.chan, self.num_samples, self.frequency, self.databuf)
+            # if databuf_fifo_flag == false
+            # databuf_fifo[] = databuf
+            # databuf_fifo_flag = true
+            # Check if the function call was successful
+            if result != 0:
+                print('Error: ADContinuV20 returned', result)
+            else:
+                 self.data_fifo_flag = True
 
-        # Check if the function call was successful
-        if result != 0:
-            print('Error: ADContinuV20 returned', result)
 
     def save_thread(self):
         """
@@ -103,15 +120,18 @@ class ADC_read_and_save:
         :return:
         """
         # Convert the data buffer to a NumPy array for easier processing
-        self.data = np.array(self.databuf)
-        # 保存数据
-        with open('data.csv', mode='a', newline='') as file:
-            writer = csv.writer(file)
-            # Convert the data buffer to a NumPy array for easier processing
-            # self.data = np.array(self.databuf)
-            writer.writerow(self.data)
 
-        file.close()
+        if self.data_fifo_flag:
+            self.data_fifo = np.array(self.databuf)
+            # 保存数据
+            with open('data.csv', mode='a', newline='') as file:
+                writer = csv.writer(file)
+                # Convert the data buffer to a NumPy array for easier processing
+                # self.data = np.array(self.databuf)
+                writer.writerow(self.data)
+            self.data_fifo_flag = False
+            print(self.data_fifo)
+            file.close()
 
 
 if __name__ == '__main__':
